@@ -1,0 +1,13 @@
+Makefile
+*.o
+*.lo
+*.la
+.deps/
+.libs/
+rpm/
+*.tar.gz
+libltdl
+/libtool
+/config.log
+/config.status
+/lcmt.spec

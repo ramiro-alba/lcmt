@@ -1,0 +1,11 @@
+LCMT - Lustre Client Monitoring Tool
+
+This is a work derived from LMT to collect and monitor metrics 
+from lustre clients.
+The monitored metrics is quite the same as the one obtained from
+the command:
+
+collectl -sl --lustopts M
+
+Ramiro Alba
+May, 2014

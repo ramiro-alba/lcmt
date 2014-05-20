@@ -1,0 +1,185 @@
+#!/usr/bin/python
+
+import urwid
+import sys, os, time, string, copy
+from threading import Timer
+
+sleepSecs = 5
+prevClientData = None
+columnWidth = 9
+minSortPointer = 0
+maxSortPointer = 12
+sortPointer = minSortPointer
+
+palette = [
+    ('header','white','dark red'),
+    ('body','black','light gray'),
+]
+
+
+############################################################################################
+#                                  CEREBRO FUNCTIONS
+############################################################################################
+
+def getClientData():
+    clientData = []
+    numCol = 0
+
+    for line in os.popen("lcmtstats").readlines():
+        dataList = []
+        ncol = 0
+        for data in string.split(line.strip(), sep = ";"):
+            if ncol == 0:
+                dataList.append(data)
+            elif ncol <= 2:
+                dataList.append(float(data))
+            else:
+                dataList.append(int(data))
+            ncol += 1
+        clientData.append(dataList)
+
+    clientData = sorted(clientData, reverse=False, key = lambda client: client[numCol])
+
+    return clientData
+
+def getPrevData(prevClientData, nodeName):
+    prevData = None
+    for data in prevClientData:
+        if data[0] == nodeName:
+            prevData = data
+            break
+    return prevData
+
+def calcDataColumns(clientData, prevClientData, sortPointer):
+    dataColumns = []
+    reverseOrder = True
+
+    for data in clientData:
+        diffList = []
+        prevData = getPrevData(prevClientData, data[0])
+        for i in range(len(data)):
+            if i <= 2:
+                diffList.append(data[i])
+            else:
+                dataDiff = (data[i] - prevData[i])
+                if i == 3 or i == 5: 
+                    diffList.append(dataDiff / (1024 * 1024))
+                else:
+                    diffList.append(dataDiff)
+        dataColumns.append(diffList)
+
+    if sortPointer == 0: reverseOrder = False
+
+    dataColumns = sorted(dataColumns, reverse = reverseOrder, 
+                         key = lambda client: client[sortPointer])
+
+    return dataColumns
+
+############################################################################################
+#                                  CURSES FUNCTIONS
+############################################################################################
+
+def getBodyRows(sortPointer):
+    global prevClientData
+    global columnWidth
+    bodyRows = ""
+
+    clientData = getClientData()
+    dataColumns = calcDataColumns(clientData, prevClientData, sortPointer)
+    prevClientData = copy.deepcopy(clientData)
+
+    for dataLine in dataColumns:
+        numCol = 0
+        for data in dataLine:
+            if numCol == 0:
+                dataStr = data
+            elif numCol <= 2:
+                dataStr = "%.2f" % data
+            else:
+                dataStr = str(data)
+            numCol += 1
+            numSpaces = columnWidth - len(dataStr)
+            bodyRows += dataStr + numSpaces * " "
+        bodyRows += "\n"
+
+    return bodyRows 
+
+def getHeaderRows(sortPointer):
+    global columnWidth, sleepSecs
+    numCol = 0
+    headerRows = "LEFT -> switch order column left; "
+    headerRows += "RIGHT -> switch order column right; "
+    headerRows += "R -> refresh (%d secs)\n" % sleepSecs
+    headLine = "Node %CPU %Mem MBRead Reads MBWrite Writes Open "
+    headLine += "Close GAttr SAttr Seek Fsynk DrtHit DrtMis"
+
+    for name in string.split(headLine, sep = " "):
+        numSpaces = columnWidth - len(name)
+        if numCol == sortPointer:
+            markPointer = "<"
+            numSpaces -= 1
+        else:
+            markPointer = ""
+        numCol += 1
+        headerRows += name + markPointer + numSpaces * " "
+
+    return headerRows
+
+def unhandledInput(key):
+    global sortPointer, minSortPointer, maxSortPointer
+    global headerText, bodyText
+
+    if key in ('q', 'Q'):
+        raise urwid.ExitMainLoop()
+    elif key in ('r', 'R'):
+        bodyRows = getBodyRows(sortPointer)
+        bodyText.set_text(bodyRows)
+    elif key in ('left'):
+        if sortPointer == minSortPointer:
+            sortPointer = maxSortPointer
+        else:
+            sortPointer -= 1
+        headerRows = getHeaderRows(sortPointer)
+        headerText.set_text(headerRows)
+        bodyRows = getBodyRows(sortPointer)
+        bodyText.set_text(bodyRows)
+    elif key in ('right'):
+        if sortPointer == maxSortPointer:
+            sortPointer = minSortPointer
+        else:
+            sortPointer += 1
+        headerRows = getHeaderRows(sortPointer)
+        headerText.set_text(headerRows)
+        bodyRows = getBodyRows(sortPointer)
+        bodyText.set_text(bodyRows)
+
+def doRefresh(_loop,_data): 
+    global sortPointer, bodyText
+
+    bodyRows = getBodyRows(sortPointer)
+    bodyText.set_text(bodyRows)
+    _loop.set_alarm_in(sleepSecs, doRefresh)
+
+
+prevClientData = getClientData()
+sys.stdout.write("Waiting %d secconds to start..." % sleepSecs)
+sys.stdout.flush()
+time.sleep(sleepSecs)    
+print "Done"
+
+headerRows = getHeaderRows(sortPointer)
+headerText = urwid.Text(headerRows, align='left')
+
+bodyRows = getBodyRows(sortPointer)
+bodyText = urwid.Text(bodyRows, align='left')
+
+listbox = urwid.ListBox(urwid.SimpleListWalker([bodyText]))
+headerWrap = urwid.AttrWrap(headerText, 'header')
+frame = urwid.Frame(urwid.AttrWrap(listbox, 'body'), header = headerWrap)
+
+screen = urwid.raw_display.Screen()
+
+loop = urwid.MainLoop(frame, palette, screen, unhandled_input = unhandledInput)
+loop.set_alarm_in(sleepSecs, doRefresh)
+loop.run()
+

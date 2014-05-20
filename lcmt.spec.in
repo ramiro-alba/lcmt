@@ -1,0 +1,52 @@
+Name: @META_NAME@
+Version: @META_VERSION@
+Release: @META_RELEASE@%{?dist}
+
+# TODO: lmt-utils subpackage for ltop (once ltop can read proc directly)
+
+License: GPL
+Group: Applications/System
+Summary: Lustre Client Montitoring Tool
+URL: http://github.com/chaos/lmt
+Packager: Ned Bass <bass6@llnl.gov>
+Source: %{name}-%{version}.tar.gz
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
+BuildRequires: cerebro >= 1.3-5
+BuildRequires: lua-devel
+Requires: python-urwid
+#%define __spec_install_post /usr/lib/rpm/brp-compress || :
+%define debug_package %{nil}
+
+%description
+Lustre Client Monitoring Tool (LCMT)
+
+%package server-agent
+Summary: Lustre Client Monitoring Tools Server Agent
+Group: Applications/System
+Requires: cerebro >= 1.3
+%description server-agent
+Lustre Client Monitoring Tool (LCMT) Server Agent
+
+%prep
+%setup
+
+%build
+%configure
+make
+
+%check
+
+%install
+rm -rf   $RPM_BUILD_ROOT
+make install DESTDIR=$RPM_BUILD_ROOT
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+
+%files
+%{_sbindir}/lcmtstats
+%{_bindir}/lctop
+
+%files server-agent
+%{_sbindir}/lcmtmetric
+%{_libdir}/cerebro/cerebro_metric_lmt*
