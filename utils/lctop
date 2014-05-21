@@ -6,7 +6,6 @@ from threading import Timer
 
 sleepSecs = 5
 prevClientData = None
-columnWidth = 9
 minSortPointer = 0
 maxSortPointer = 12
 sortPointer = minSortPointer
@@ -81,7 +80,6 @@ def calcDataColumns(clientData, prevClientData, sortPointer):
 
 def getBodyRows(sortPointer):
     global prevClientData
-    global columnWidth
     bodyRows = ""
 
     clientData = getClientData()
@@ -92,20 +90,19 @@ def getBodyRows(sortPointer):
         numCol = 0
         for data in dataLine:
             if numCol == 0:
-                dataStr = data
+                dataStr = "%-20s" % data[:20]
             elif numCol <= 2:
-                dataStr = "%.2f" % data
+                dataStr = "%6.2f" % data
             else:
-                dataStr = str(data)
+                dataStr = "%9.0f" % int(data)
             numCol += 1
-            numSpaces = columnWidth - len(dataStr)
-            bodyRows += dataStr + numSpaces * " "
+            bodyRows += dataStr
         bodyRows += "\n"
 
     return bodyRows 
 
 def getHeaderRows(sortPointer):
-    global columnWidth, sleepSecs
+    global sleepSecs
     numCol = 0
     headerRows = "LEFT -> switch order column left; "
     headerRows += "RIGHT -> switch order column right; "
@@ -114,14 +111,17 @@ def getHeaderRows(sortPointer):
     headLine += "Close GAttr SAttr Seek Fsynk DrtHit DrtMis"
 
     for name in string.split(headLine, sep = " "):
-        numSpaces = columnWidth - len(name)
         if numCol == sortPointer:
             markPointer = "<"
-            numSpaces -= 1
         else:
             markPointer = ""
+        if numCol == 0:
+            headerRows += "%-20s" % (name + markPointer)
+        elif numCol <=2:
+            headerRows += "%6s" % (name + markPointer)
+        else:
+            headerRows += "%9s" % (name + markPointer)
         numCol += 1
-        headerRows += name + markPointer + numSpaces * " "
 
     return headerRows
 
