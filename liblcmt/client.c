@@ -29,6 +29,7 @@
 
 #include <stdio.h>
 #include <dirent.h> 
+#include <unistd.h> 
 #include <stdlib.h>
 #if STDC_HEADERS
 #include <string.h>
@@ -70,20 +71,21 @@ lmt_client_string (pctx_t ctx, char *s, int len)
     static uint64_t cpuused = 0, cputot = 0;
     struct utsname uts;
     double cpupct, mempct;
-    int n, retval = -1;
+    int n, retval = -1, lustre_mounted = 0;
     hash_t stats_hash = NULL;
-    uint64_t read_bytes, write_bytes;
-    uint64_t read_count, write_count;
-    uint64_t open_count, close_count;
-    uint64_t getattr_count, setattr_count;
-    uint64_t seek_count, fsync_count;
-    uint64_t dhits_count, dmisses_count;
-    char name[256];
-    DIR  *d;
+    uint64_t read_bytes = 0, write_bytes = 0;
+    uint64_t read_count = 0, write_count = 0;
+    uint64_t open_count = 0, close_count = 0;
+    uint64_t getattr_count = 0, setattr_count = 0;
+    uint64_t seek_count = 0, fsync_count = 0;
+    uint64_t dhits_count = 0, dmisses_count = 0;
+    char *path_base = "/proc/fs/lustre/llite", stats_file[256], name[256];
+    DIR  *d = NULL;
     struct dirent *dir;
 
-    d = opendir("/proc/fs/lustre/llite");
-    if (d) {
+    d = opendir(path_base);
+    if (d != NULL) {
+        lustre_mounted = 1;
         while ((dir = readdir(d)) != NULL) {
             if (!strncmp(dir->d_name, ".", 1)) continue;
             strcpy(name, dir->d_name);
@@ -101,34 +103,38 @@ lmt_client_string (pctx_t ctx, char *s, int len)
     }
     if (_get_mem_usage (ctx, &mempct) < 0)
         goto done;
-    if (proc_lustre_hashstats (ctx, name, &stats_hash) < 0) {
-        err ("error reading lustre %s stats from proc", name);
-        goto done;
+
+    sprintf(stats_file, "%s/%s/stats", path_base, name);
+    if (lustre_mounted && !access(stats_file, R_OK)) {
+        if (proc_lustre_hashstats (ctx, name, &stats_hash) < 0) {
+            err ("error reading lustre %s stats from proc", name);
+            goto done;
+        }
+        proc_lustre_parsestat (stats_hash, "read_bytes", NULL, NULL, NULL,
+                               &read_bytes, NULL);
+        proc_lustre_parsestat (stats_hash, "read_bytes", &read_count, NULL, NULL,
+                               NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "write_bytes", NULL, NULL, NULL,
+                               &write_bytes, NULL);
+        proc_lustre_parsestat (stats_hash, "write_bytes", &write_count, NULL, NULL,
+                              NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "open", &open_count, NULL, NULL,
+                              NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "close", &close_count, NULL, NULL,
+                              NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "getattr", &getattr_count, NULL, NULL,
+                              NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "setattr", &setattr_count, NULL, NULL,
+                              NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "seek", &seek_count, NULL, NULL,
+                              NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "fsync", &fsync_count, NULL, NULL,
+                              NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "dirty_pages_hits", &dhits_count, NULL, NULL,
+                              NULL, NULL);
+        proc_lustre_parsestat (stats_hash, "dirty_pages_misses", &dmisses_count, NULL, NULL,
+                              NULL, NULL);
     }
-    proc_lustre_parsestat (stats_hash, "read_bytes", NULL, NULL, NULL,
-                           &read_bytes, NULL);
-    proc_lustre_parsestat (stats_hash, "read_bytes", &read_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "write_bytes", NULL, NULL, NULL,
-                           &write_bytes, NULL);
-    proc_lustre_parsestat (stats_hash, "write_bytes", &write_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "open", &open_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "close", &close_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "getattr", &getattr_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "setattr", &setattr_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "seek", &seek_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "fsync", &fsync_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "dirty_pages_hits", &dhits_count, NULL, NULL,
-                           NULL, NULL);
-    proc_lustre_parsestat (stats_hash, "dirty_pages_misses", &dmisses_count, NULL, NULL,
-                           NULL, NULL);
     n = snprintf (s, len, "%f;%f"
                   ";%"PRIu64";%"PRIu64";%"PRIu64";%"PRIu64
                   ";%"PRIu64";%"PRIu64";%"PRIu64";%"PRIu64
